@@ -1,5 +1,7 @@
 use wgpu::RenderPipeline;
 
+use crate::mesh::Vertex;
+
 pub struct Pipeline {
     pub render_pipeline: RenderPipeline,
     pub bind_group_layout: wgpu::BindGroupLayout,
@@ -39,11 +41,11 @@ impl Pipeline {
             vertex: wgpu::VertexState {
                 module: shader,
                 entry_point: "vs_main",
-                buffers: &[],
+                buffers: &[Vertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: shader,
-                entry_point: "fs_main", 
+                entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
