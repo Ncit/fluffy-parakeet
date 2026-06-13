@@ -1,0 +1,19 @@
+{
+  "duration": 3.0,
+  "nodes": [
+    {
+      "type": "rect",
+      "x": [{"time": 0.0, "value": -0.6}, {"time": 1.5, "value": 0.6}, {"time": 3.0, "value": -0.6}],
+      "y": [{"time": 0.0, "value": 0.25}],
+      "scale_x": [{"time": 0.0, "value": 0.35}],
+      "scale_y": [{"time": 0.0, "value": 0.35}]
+    },
+    {
+      "type": "rect",
+      "x": [{"time": 0.0, "value": 0.0}],
+      "y": [{"time": 0.0, "value": -0.45}, {"time": 1.5, "value": 0.05}, {"time": 3.0, "value": -0.45}],
+      "scale_x": [{"time": 0.0, "value": 0.25}],
+      "scale_y": [{"time": 0.0, "value": 0.25}]
+    }
+  ]
+}
