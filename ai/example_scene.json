@@ -2,18 +2,28 @@
   "duration": 3.0,
   "nodes": [
     {
+      "id": "hero-rect",
       "type": "rect",
+      "layer": 1,
+      "color": [0.2, 0.8, 1.0, 1.0],
       "x": [{"time": 0.0, "value": -0.6}, {"time": 1.5, "value": 0.6}, {"time": 3.0, "value": -0.6}],
       "y": [{"time": 0.0, "value": 0.25}],
       "scale_x": [{"time": 0.0, "value": 0.35}],
-      "scale_y": [{"time": 0.0, "value": 0.35}]
+      "scale_y": [{"time": 0.0, "value": 0.35}],
+      "rotation": [{"time": 0.0, "value": 0.0}, {"time": 3.0, "value": 6.28318}],
+      "opacity": [{"time": 0.0, "value": 1.0}]
     },
     {
+      "id": "support-rect",
       "type": "rect",
+      "layer": 0,
+      "color": [1.0, 0.35, 0.2, 0.85],
       "x": [{"time": 0.0, "value": 0.0}],
       "y": [{"time": 0.0, "value": -0.45}, {"time": 1.5, "value": 0.05}, {"time": 3.0, "value": -0.45}],
       "scale_x": [{"time": 0.0, "value": 0.25}],
-      "scale_y": [{"time": 0.0, "value": 0.25}]
+      "scale_y": [{"time": 0.0, "value": 0.25}],
+      "rotation": [{"time": 0.0, "value": 0.0}],
+      "opacity": [{"time": 0.0, "value": 0.85}]
     }
   ]
 }
