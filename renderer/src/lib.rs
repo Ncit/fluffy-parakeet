@@ -1,20 +1,21 @@
 use winit::{event::*, event_loop::EventLoop, window::WindowBuilder};
 
-pub struct Renderer {
-    pub state: Option<RenderState>,
-}
+mod state;
 
-pub struct RenderState {
-    pub size: (u32, u32),
+pub struct Renderer {
+    pub state: Option<state::State>,
 }
 
 impl Renderer {
     pub async fn new(window: &winit::window::Window) -> Self {
-        Self { state: Some(RenderState { size: (800, 600) }) }
+        let state = state::State::new(window).await;
+        Self { state: Some(state) }
     }
 
     pub fn render(&mut self) {
-        // TODO: wgpu frame rendering pipeline
+        if let Some(state) = &mut self.state {
+            state.render();
+        }
     }
 }
 
