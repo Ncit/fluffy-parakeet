@@ -27,7 +27,11 @@ impl AnimatedValue {
             let a = pair[0];
             let b = pair[1];
             if t >= a.time && t <= b.time {
-                let local_t = (t - a.time) / (b.time - a.time);
+                let duration = b.time - a.time;
+                if duration.abs() < f32::EPSILON {
+                    return b.value;
+                }
+                let local_t = (t - a.time) / duration;
                 return a.value + (b.value - a.value) * local_t;
             }
         }
@@ -112,5 +116,29 @@ impl Scene {
     pub fn demo() -> Self {
         Self::from_dsl_json(include_str!("../../ai/example_scene.json"))
             .expect("demo DSL scene should parse")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn samples_between_keyframes() {
+        let value = AnimatedValue {
+            keyframes: vec![
+                Keyframe { time: 0.0, value: 0.0 },
+                Keyframe { time: 1.0, value: 10.0 },
+            ],
+        };
+
+        assert_eq!(value.sample(0.5), 5.0);
+    }
+
+    #[test]
+    fn parses_demo_scene() {
+        let scene = Scene::demo();
+        assert_eq!(scene.nodes.len(), 2);
+        assert!(scene.duration > 0.0);
     }
 }
