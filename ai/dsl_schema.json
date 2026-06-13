@@ -1,0 +1,15 @@
+{
+  "scene": [
+    {
+      "type": "text",
+      "content": "Hello AI Video",
+      "animation": {
+        "fade_in": 0.2,
+        "move": {
+          "from": [0, 100],
+          "to": [0, 0]
+        }
+      }
+    }
+  ]
+}
