@@ -2,6 +2,8 @@ use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 use crate::pipeline::Pipeline;
+use crate::mesh::{Vertex, quad_vertices};
+use crate::uniforms::{TransformUniform};
 
 pub struct State {
     pub surface: wgpu::Surface,
@@ -12,6 +14,12 @@ pub struct State {
 
     pub pipeline: Pipeline,
     pub shader: wgpu::ShaderModule,
+
+    pub vertex_buffer: wgpu::Buffer,
+    pub uniform_buffer: wgpu::Buffer,
+    pub bind_group: wgpu::BindGroup,
+
+    pub time: f32,
 }
 
 impl State {
@@ -60,6 +68,35 @@ impl State {
 
         let pipeline = Pipeline::new(&device, &config, &shader);
 
+        let vertices = quad_vertices();
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let uniform = TransformUniform {
+            offset: [0.0, 0.0],
+            scale: [1.0, 1.0],
+        };
+
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Uniform Buffer"),
+            contents: bytemuck::bytes_of(&uniform),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Bind Group"),
+            layout: &pipeline.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                }
+            ],
+        });
+
         Self {
             surface,
             device,
@@ -68,10 +105,25 @@ impl State {
             size,
             pipeline,
             shader,
+            vertex_buffer,
+            uniform_buffer,
+            bind_group,
+            time: 0.0,
         }
     }
 
     pub fn render(&mut self) {
+        self.time += 0.016;
+
+        let offset_x = self.time.sin() * 0.5;
+
+        let transform = TransformUniform {
+            offset: [offset_x, 0.0],
+            scale: [0.5, 0.5],
+        };
+
+        self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&transform));
+
         let frame = self.surface.get_current_texture().unwrap();
         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -101,7 +153,9 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.pipeline.render_pipeline);
-            render_pass.draw(0..3, 0..1);
+            render_pass.set_bind_group(0, &self.bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.draw(0..6, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
