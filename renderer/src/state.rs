@@ -4,7 +4,7 @@ use winit::window::Window;
 use crate::mesh::quad_vertices;
 use crate::pipeline::Pipeline;
 use crate::scene::Scene;
-use crate::uniforms::TransformUniform;
+use crate::uniforms::NodeUniform;
 
 pub struct RenderObject {
     pub uniform_buffer: wgpu::Buffer,
@@ -83,15 +83,16 @@ impl<'window> State<'window> {
 
         let scene = Scene::demo();
         let render_objects = scene.nodes.iter().map(|node| {
-            let uniform = node.sample(0.0).to_uniform();
+            let sampled = node.sample(0.0);
+            let uniform = sampled.uniform;
             let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Node Transform Uniform Buffer"),
+                label: Some("Node Uniform Buffer"),
                 contents: bytemuck::bytes_of(&uniform),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Node Transform Bind Group"),
+                label: Some("Node Bind Group"),
                 layout: &pipeline.bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
@@ -131,8 +132,8 @@ impl<'window> State<'window> {
         let timeline_time = self.time % self.scene.duration.max(0.001);
 
         for (node, render_object) in self.scene.nodes.iter().zip(self.render_objects.iter()) {
-            let transform: TransformUniform = node.sample(timeline_time).to_uniform();
-            self.queue.write_buffer(&render_object.uniform_buffer, 0, bytemuck::bytes_of(&transform));
+            let uniform: NodeUniform = node.sample(timeline_time).uniform;
+            self.queue.write_buffer(&render_object.uniform_buffer, 0, bytemuck::bytes_of(&uniform));
         }
 
         let frame = match self.surface.get_current_texture() {
