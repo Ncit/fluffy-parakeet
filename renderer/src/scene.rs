@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::uniforms::TransformUniform;
+use crate::uniforms::NodeUniform;
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub struct Keyframe {
@@ -14,6 +14,12 @@ pub struct AnimatedValue {
 }
 
 impl AnimatedValue {
+    pub fn constant(value: f32) -> Self {
+        Self {
+            keyframes: vec![Keyframe { time: 0.0, value }],
+        }
+    }
+
     pub fn sample(&self, t: f32) -> f32 {
         if self.keyframes.is_empty() {
             return 0.0;
@@ -41,37 +47,35 @@ impl AnimatedValue {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Transform {
-    pub x: f32,
-    pub y: f32,
-    pub scale_x: f32,
-    pub scale_y: f32,
-}
-
-impl Transform {
-    pub fn to_uniform(self) -> TransformUniform {
-        TransformUniform {
-            offset: [self.x, self.y],
-            scale: [self.scale_x, self.scale_y],
-        }
-    }
+pub struct SampledNode {
+    pub uniform: NodeUniform,
 }
 
 #[derive(Clone, Debug)]
 pub struct SceneNode {
+    pub id: String,
+    pub kind: String,
+    pub layer: i32,
+    pub color: [f32; 4],
     pub x: AnimatedValue,
     pub y: AnimatedValue,
     pub scale_x: AnimatedValue,
     pub scale_y: AnimatedValue,
+    pub rotation: AnimatedValue,
+    pub opacity: AnimatedValue,
 }
 
 impl SceneNode {
-    pub fn sample(&self, t: f32) -> Transform {
-        Transform {
-            x: self.x.sample(t),
-            y: self.y.sample(t),
-            scale_x: self.scale_x.sample(t),
-            scale_y: self.scale_y.sample(t),
+    pub fn sample(&self, t: f32) -> SampledNode {
+        SampledNode {
+            uniform: NodeUniform {
+                offset: [self.x.sample(t), self.y.sample(t)],
+                scale: [self.scale_x.sample(t), self.scale_y.sample(t)],
+                rotation: self.rotation.sample(t),
+                opacity: self.opacity.sample(t),
+                _padding: [0.0, 0.0],
+                color: self.color,
+            },
         }
     }
 }
@@ -90,26 +94,58 @@ struct DslScene {
 
 #[derive(Debug, Deserialize)]
 struct DslNode {
+    #[serde(default)]
+    id: String,
     #[serde(rename = "type")]
-    _kind: String,
+    kind: String,
+    #[serde(default)]
+    layer: i32,
+    #[serde(default = "default_color")]
+    color: [f32; 4],
     x: Vec<Keyframe>,
     y: Vec<Keyframe>,
     scale_x: Vec<Keyframe>,
     scale_y: Vec<Keyframe>,
+    #[serde(default = "default_rotation")]
+    rotation: Vec<Keyframe>,
+    #[serde(default = "default_opacity")]
+    opacity: Vec<Keyframe>,
+}
+
+fn default_color() -> [f32; 4] {
+    [0.2, 0.8, 1.0, 1.0]
+}
+
+fn default_rotation() -> Vec<Keyframe> {
+    vec![Keyframe { time: 0.0, value: 0.0 }]
+}
+
+fn default_opacity() -> Vec<Keyframe> {
+    vec![Keyframe { time: 0.0, value: 1.0 }]
 }
 
 impl Scene {
     pub fn from_dsl_json(json: &str) -> Result<Self, serde_json::Error> {
         let dsl: DslScene = serde_json::from_str(json)?;
 
+        let mut nodes: Vec<SceneNode> = dsl.nodes.into_iter().map(|node| SceneNode {
+            id: node.id,
+            kind: node.kind,
+            layer: node.layer,
+            color: node.color,
+            x: AnimatedValue { keyframes: node.x },
+            y: AnimatedValue { keyframes: node.y },
+            scale_x: AnimatedValue { keyframes: node.scale_x },
+            scale_y: AnimatedValue { keyframes: node.scale_y },
+            rotation: AnimatedValue { keyframes: node.rotation },
+            opacity: AnimatedValue { keyframes: node.opacity },
+        }).collect();
+
+        nodes.sort_by_key(|node| node.layer);
+
         Ok(Self {
             duration: dsl.duration,
-            nodes: dsl.nodes.into_iter().map(|node| SceneNode {
-                x: AnimatedValue { keyframes: node.x },
-                y: AnimatedValue { keyframes: node.y },
-                scale_x: AnimatedValue { keyframes: node.scale_x },
-                scale_y: AnimatedValue { keyframes: node.scale_y },
-            }).collect(),
+            nodes,
         })
     }
 
@@ -140,5 +176,19 @@ mod tests {
         let scene = Scene::demo();
         assert_eq!(scene.nodes.len(), 2);
         assert!(scene.duration > 0.0);
+    }
+
+    #[test]
+    fn sorts_nodes_by_layer() {
+        let scene = Scene::demo();
+        assert!(scene.nodes[0].layer <= scene.nodes[1].layer);
+    }
+
+    #[test]
+    fn samples_visual_uniforms() {
+        let scene = Scene::demo();
+        let sampled = scene.nodes[0].sample(0.0);
+        assert!(sampled.uniform.opacity >= 0.0);
+        assert!(sampled.uniform.color[3] > 0.0);
     }
 }
