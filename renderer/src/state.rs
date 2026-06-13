@@ -1,12 +1,17 @@
 use wgpu::util::DeviceExt;
 use winit::window::Window;
 
+use crate::pipeline::Pipeline;
+
 pub struct State {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
+
+    pub pipeline: Pipeline,
+    pub shader: wgpu::ShaderModule,
 }
 
 impl State {
@@ -48,12 +53,21 @@ impl State {
 
         surface.configure(&device, &config);
 
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Main Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+        });
+
+        let pipeline = Pipeline::new(&device, &config, &shader);
+
         Self {
             surface,
             device,
             queue,
             config,
             size,
+            pipeline,
+            shader,
         }
     }
 
@@ -66,7 +80,7 @@ impl State {
         });
 
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -85,6 +99,9 @@ impl State {
                 occlusion_query_set: None,
                 timestamp_writes: None,
             });
+
+            render_pass.set_pipeline(&self.pipeline.render_pipeline);
+            render_pass.draw(0..3, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
