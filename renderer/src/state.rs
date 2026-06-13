@@ -11,8 +11,8 @@ pub struct RenderObject {
     pub bind_group: wgpu::BindGroup,
 }
 
-pub struct State {
-    pub surface: wgpu::Surface,
+pub struct State<'window> {
+    pub surface: wgpu::Surface<'window>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
@@ -28,16 +28,16 @@ pub struct State {
     pub time: f32,
 }
 
-impl State {
-    pub async fn new(window: &Window) -> Self {
+impl<'window> State<'window> {
+    pub async fn new(window: &'window Window) -> Self {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::default();
-        let surface = unsafe { instance.create_surface(window) }.unwrap();
+        let surface = instance.create_surface(window).unwrap();
 
         let adapter = instance.request_adapter(
             &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             },
@@ -58,8 +58,8 @@ impl State {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width: size.width,
-            height: size.height,
+            width: size.width.max(1),
+            height: size.height.max(1),
             present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
@@ -117,16 +117,34 @@ impl State {
         }
     }
 
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        if new_size.width > 0 && new_size.height > 0 {
+            self.size = new_size;
+            self.config.width = new_size.width;
+            self.config.height = new_size.height;
+            self.surface.configure(&self.device, &self.config);
+        }
+    }
+
     pub fn render(&mut self) {
         self.time += 0.016;
-        let timeline_time = self.time % 3.0;
+        let timeline_time = self.time % self.scene.duration.max(0.001);
 
         for (node, render_object) in self.scene.nodes.iter().zip(self.render_objects.iter()) {
             let transform: TransformUniform = node.sample(timeline_time).to_uniform();
             self.queue.write_buffer(&render_object.uniform_buffer, 0, bytemuck::bytes_of(&transform));
         }
 
-        let frame = self.surface.get_current_texture().unwrap();
+        let frame = match self.surface.get_current_texture() {
+            Ok(frame) => frame,
+            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                self.resize(self.size);
+                return;
+            }
+            Err(wgpu::SurfaceError::OutOfMemory) => panic!("wgpu surface out of memory"),
+            Err(wgpu::SurfaceError::Timeout) => return,
+        };
+
         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
