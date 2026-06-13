@@ -1,29 +1,14 @@
+use serde::Deserialize;
+
 use crate::uniforms::TransformUniform;
 
-#[derive(Clone, Copy, Debug)]
-pub struct Transform {
-    pub x: f32,
-    pub y: f32,
-    pub scale_x: f32,
-    pub scale_y: f32,
-}
-
-impl Transform {
-    pub fn to_uniform(self) -> TransformUniform {
-        TransformUniform {
-            offset: [self.x, self.y],
-            scale: [self.scale_x, self.scale_y],
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Deserialize)]
 pub struct Keyframe {
     pub time: f32,
     pub value: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct AnimatedValue {
     pub keyframes: Vec<Keyframe>,
 }
@@ -51,6 +36,23 @@ impl AnimatedValue {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Transform {
+    pub x: f32,
+    pub y: f32,
+    pub scale_x: f32,
+    pub scale_y: f32,
+}
+
+impl Transform {
+    pub fn to_uniform(self) -> TransformUniform {
+        TransformUniform {
+            offset: [self.x, self.y],
+            scale: [self.scale_x, self.scale_y],
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct SceneNode {
     pub x: AnimatedValue,
@@ -72,34 +74,43 @@ impl SceneNode {
 
 #[derive(Clone, Debug)]
 pub struct Scene {
+    pub duration: f32,
     pub nodes: Vec<SceneNode>,
 }
 
+#[derive(Debug, Deserialize)]
+struct DslScene {
+    duration: f32,
+    nodes: Vec<DslNode>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DslNode {
+    #[serde(rename = "type")]
+    _kind: String,
+    x: Vec<Keyframe>,
+    y: Vec<Keyframe>,
+    scale_x: Vec<Keyframe>,
+    scale_y: Vec<Keyframe>,
+}
+
 impl Scene {
+    pub fn from_dsl_json(json: &str) -> Result<Self, serde_json::Error> {
+        let dsl: DslScene = serde_json::from_str(json)?;
+
+        Ok(Self {
+            duration: dsl.duration,
+            nodes: dsl.nodes.into_iter().map(|node| SceneNode {
+                x: AnimatedValue { keyframes: node.x },
+                y: AnimatedValue { keyframes: node.y },
+                scale_x: AnimatedValue { keyframes: node.scale_x },
+                scale_y: AnimatedValue { keyframes: node.scale_y },
+            }).collect(),
+        })
+    }
+
     pub fn demo() -> Self {
-        Self {
-            nodes: vec![
-                SceneNode {
-                    x: AnimatedValue { keyframes: vec![
-                        Keyframe { time: 0.0, value: -0.6 },
-                        Keyframe { time: 1.5, value: 0.6 },
-                        Keyframe { time: 3.0, value: -0.6 },
-                    ]},
-                    y: AnimatedValue { keyframes: vec![Keyframe { time: 0.0, value: 0.25 }] },
-                    scale_x: AnimatedValue { keyframes: vec![Keyframe { time: 0.0, value: 0.35 }] },
-                    scale_y: AnimatedValue { keyframes: vec![Keyframe { time: 0.0, value: 0.35 }] },
-                },
-                SceneNode {
-                    x: AnimatedValue { keyframes: vec![Keyframe { time: 0.0, value: 0.0 }] },
-                    y: AnimatedValue { keyframes: vec![
-                        Keyframe { time: 0.0, value: -0.45 },
-                        Keyframe { time: 1.5, value: 0.05 },
-                        Keyframe { time: 3.0, value: -0.45 },
-                    ]},
-                    scale_x: AnimatedValue { keyframes: vec![Keyframe { time: 0.0, value: 0.25 }] },
-                    scale_y: AnimatedValue { keyframes: vec![Keyframe { time: 0.0, value: 0.25 }] },
-                },
-            ],
-        }
+        Self::from_dsl_json(include_str!("../../ai/example_scene.json"))
+            .expect("demo DSL scene should parse")
     }
 }
