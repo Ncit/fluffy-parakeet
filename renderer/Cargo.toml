@@ -1,0 +1,9 @@
+[package]
+name = "renderer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+winit = "0.30"
+wgpu = "0.20"
+pollster = "0.3"
