@@ -1,9 +1,15 @@
 use wgpu::util::DeviceExt;
 use winit::window::Window;
 
+use crate::mesh::quad_vertices;
 use crate::pipeline::Pipeline;
-use crate::mesh::{Vertex, quad_vertices};
-use crate::uniforms::{TransformUniform};
+use crate::scene::Scene;
+use crate::uniforms::TransformUniform;
+
+pub struct RenderObject {
+    pub uniform_buffer: wgpu::Buffer,
+    pub bind_group: wgpu::BindGroup,
+}
 
 pub struct State {
     pub surface: wgpu::Surface,
@@ -16,8 +22,8 @@ pub struct State {
     pub shader: wgpu::ShaderModule,
 
     pub vertex_buffer: wgpu::Buffer,
-    pub uniform_buffer: wgpu::Buffer,
-    pub bind_group: wgpu::BindGroup,
+    pub scene: Scene,
+    pub render_objects: Vec<RenderObject>,
 
     pub time: f32,
 }
@@ -75,27 +81,26 @@ impl State {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let uniform = TransformUniform {
-            offset: [0.0, 0.0],
-            scale: [1.0, 1.0],
-        };
+        let scene = Scene::demo();
+        let render_objects = scene.nodes.iter().map(|node| {
+            let uniform = node.sample(0.0).to_uniform();
+            let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Node Transform Uniform Buffer"),
+                contents: bytemuck::bytes_of(&uniform),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
 
-        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Uniform Buffer"),
-            contents: bytemuck::bytes_of(&uniform),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Bind Group"),
-            layout: &pipeline.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Node Transform Bind Group"),
+                layout: &pipeline.bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
                     binding: 0,
                     resource: uniform_buffer.as_entire_binding(),
-                }
-            ],
-        });
+                }],
+            });
+
+            RenderObject { uniform_buffer, bind_group }
+        }).collect();
 
         Self {
             surface,
@@ -106,23 +111,20 @@ impl State {
             pipeline,
             shader,
             vertex_buffer,
-            uniform_buffer,
-            bind_group,
+            scene,
+            render_objects,
             time: 0.0,
         }
     }
 
     pub fn render(&mut self) {
         self.time += 0.016;
+        let timeline_time = self.time % 3.0;
 
-        let offset_x = self.time.sin() * 0.5;
-
-        let transform = TransformUniform {
-            offset: [offset_x, 0.0],
-            scale: [0.5, 0.5],
-        };
-
-        self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&transform));
+        for (node, render_object) in self.scene.nodes.iter().zip(self.render_objects.iter()) {
+            let transform: TransformUniform = node.sample(timeline_time).to_uniform();
+            self.queue.write_buffer(&render_object.uniform_buffer, 0, bytemuck::bytes_of(&transform));
+        }
 
         let frame = self.surface.get_current_texture().unwrap();
         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -138,12 +140,7 @@ impl State {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.1, g: 0.2, b: 0.3, a: 1.0 }),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -153,9 +150,12 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.pipeline.render_pipeline);
-            render_pass.set_bind_group(0, &self.bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..6, 0..1);
+
+            for render_object in &self.render_objects {
+                render_pass.set_bind_group(0, &render_object.bind_group, &[]);
+                render_pass.draw(0..6, 0..1);
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
