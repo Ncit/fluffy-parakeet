@@ -1,6 +1,10 @@
 use winit::{event::*, event_loop::EventLoop, window::WindowBuilder};
 
+mod mesh;
+mod pipeline;
+mod scene;
 mod state;
+mod uniforms;
 
 pub struct Renderer {
     pub state: Option<state::State>,
