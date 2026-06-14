@@ -33,9 +33,9 @@ Status legend: `[x]` done, `[ ]` todo, `[~]` in progress / needs verification.
 
 ## 2. Scene graph and timeline MVP
 
-- [ ] Add `start_time` and `end_time` node lifecycle fields
-- [ ] Skip inactive nodes during render
-- [ ] Add timeline visibility tests
+- [x] Add `start_time` and `end_time` node lifecycle fields
+- [x] Skip inactive nodes during render
+- [x] Add timeline visibility tests
 - [ ] Add easing support to keyframes
 - [ ] Add easing tests
 - [ ] Add transform origin / anchor point support
@@ -127,7 +127,7 @@ Status legend: `[x]` done, `[ ]` todo, `[~]` in progress / needs verification.
 ## Recommended next sprint
 
 1. Verify build and CI.
-2. Add node lifecycle timing.
-3. Add easing.
-4. Add README and DSL docs.
-5. Start text node rendering.
+2. Add easing.
+3. Add README and DSL docs.
+4. Start text node rendering.
+5. Add renderer/editor bridge.
