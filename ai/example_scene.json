@@ -1,4 +1,5 @@
 {
+  "version": 3,
   "duration": 3.0,
   "nodes": [
     {
@@ -7,6 +8,10 @@
       "layer": 1,
       "start_time": 0.0,
       "end_time": 3.0,
+      "selection": {
+        "name": "Hero Rectangle",
+        "tags": ["hero", "animated"]
+      },
       "color": [0.2, 0.8, 1.0, 1.0],
       "width": 1.0,
       "height": 0.55,
@@ -25,6 +30,10 @@
       "layer": 0,
       "start_time": 0.5,
       "end_time": 2.5,
+      "selection": {
+        "name": "Support Rectangle",
+        "tags": ["background"]
+      },
       "color": [1.0, 0.35, 0.2, 0.85],
       "width": 0.8,
       "height": 0.8,
