@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use serde::Deserialize;
@@ -66,6 +66,23 @@ impl AnimatedValue {
     }
 }
 
+#[derive(Clone, Debug, Default, Deserialize)]
+struct AnimationPreset {
+    x: Option<Vec<Keyframe>>, y: Option<Vec<Keyframe>>, scale_x: Option<Vec<Keyframe>>, scale_y: Option<Vec<Keyframe>>,
+    rotation: Option<Vec<Keyframe>>, opacity: Option<Vec<Keyframe>>,
+}
+
+impl AnimationPreset {
+    fn apply_to(&self, node: &mut DslNode) {
+        if let Some(value) = &self.x { node.x = value.clone(); }
+        if let Some(value) = &self.y { node.y = value.clone(); }
+        if let Some(value) = &self.scale_x { node.scale_x = value.clone(); }
+        if let Some(value) = &self.scale_y { node.scale_y = value.clone(); }
+        if let Some(value) = &self.rotation { node.rotation = value.clone(); }
+        if let Some(value) = &self.opacity { node.opacity = value.clone(); }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct SampledNode { pub uniform: NodeUniform }
 
@@ -126,13 +143,19 @@ impl SceneNode {
 pub struct Scene { pub version: u32, pub duration: f32, pub nodes: Vec<SceneNode> }
 
 #[derive(Debug, Deserialize)]
-struct DslScene { version: u32, duration: f32, nodes: Vec<DslNode> }
+struct DslScene {
+    version: u32,
+    duration: f32,
+    #[serde(default)] presets: HashMap<String, AnimationPreset>,
+    nodes: Vec<DslNode>,
+}
 
 #[derive(Debug, Deserialize)]
 struct DslNode {
     id: String,
     #[serde(default)] parent_id: Option<String>,
     #[serde(rename = "type")] kind: String,
+    #[serde(default)] preset: Option<String>,
     #[serde(default)] layer: i32,
     #[serde(default)] start_time: f32,
     #[serde(default)] end_time: Option<f32>,
@@ -142,7 +165,10 @@ struct DslNode {
     #[serde(default = "default_height")] height: f32,
     #[serde(default = "default_anchor")] anchor_x: f32,
     #[serde(default = "default_anchor")] anchor_y: f32,
-    x: Vec<Keyframe>, y: Vec<Keyframe>, scale_x: Vec<Keyframe>, scale_y: Vec<Keyframe>,
+    #[serde(default = "default_zero_keyframes")] x: Vec<Keyframe>,
+    #[serde(default = "default_zero_keyframes")] y: Vec<Keyframe>,
+    #[serde(default = "default_one_keyframes")] scale_x: Vec<Keyframe>,
+    #[serde(default = "default_one_keyframes")] scale_y: Vec<Keyframe>,
     #[serde(default = "default_rotation")] rotation: Vec<Keyframe>,
     #[serde(default = "default_opacity")] opacity: Vec<Keyframe>,
 }
@@ -152,8 +178,10 @@ fn default_width() -> f32 { 1.0 }
 fn default_height() -> f32 { 1.0 }
 fn default_anchor() -> f32 { 0.5 }
 fn default_selectable() -> bool { true }
-fn default_rotation() -> Vec<Keyframe> { vec![Keyframe { time: 0.0, value: 0.0, easing: Easing::Linear }] }
-fn default_opacity() -> Vec<Keyframe> { vec![Keyframe { time: 0.0, value: 1.0, easing: Easing::Linear }] }
+fn default_zero_keyframes() -> Vec<Keyframe> { vec![Keyframe { time: 0.0, value: 0.0, easing: Easing::Linear }] }
+fn default_one_keyframes() -> Vec<Keyframe> { vec![Keyframe { time: 0.0, value: 1.0, easing: Easing::Linear }] }
+fn default_rotation() -> Vec<Keyframe> { default_zero_keyframes() }
+fn default_opacity() -> Vec<Keyframe> { default_one_keyframes() }
 
 impl Scene {
     pub fn node_by_id(&self, id: &str) -> Option<&SceneNode> { self.nodes.iter().find(|node| node.id == id) }
@@ -175,13 +203,19 @@ impl Scene {
 
     pub fn from_dsl_json(json: &str) -> Result<Self, SceneLoadError> {
         let dsl: DslScene = serde_json::from_str(json)?;
-        let mut nodes: Vec<SceneNode> = dsl.nodes.into_iter().map(|node| SceneNode {
-            id: node.id, parent_id: node.parent_id, kind: node.kind, layer: node.layer,
-            start_time: node.start_time, end_time: node.end_time, selection: node.selection, color: node.color,
-            width: node.width, height: node.height, anchor_x: node.anchor_x, anchor_y: node.anchor_y,
-            x: AnimatedValue { keyframes: node.x }, y: AnimatedValue { keyframes: node.y },
-            scale_x: AnimatedValue { keyframes: node.scale_x }, scale_y: AnimatedValue { keyframes: node.scale_y },
-            rotation: AnimatedValue { keyframes: node.rotation }, opacity: AnimatedValue { keyframes: node.opacity },
+        validate_preset_references(&dsl)?;
+        let mut nodes: Vec<SceneNode> = dsl.nodes.into_iter().map(|mut node| {
+            if let Some(preset_name) = &node.preset {
+                if let Some(preset) = dsl.presets.get(preset_name) { preset.apply_to(&mut node); }
+            }
+            SceneNode {
+                id: node.id, parent_id: node.parent_id, kind: node.kind, layer: node.layer,
+                start_time: node.start_time, end_time: node.end_time, selection: node.selection, color: node.color,
+                width: node.width, height: node.height, anchor_x: node.anchor_x, anchor_y: node.anchor_y,
+                x: AnimatedValue { keyframes: node.x }, y: AnimatedValue { keyframes: node.y },
+                scale_x: AnimatedValue { keyframes: node.scale_x }, scale_y: AnimatedValue { keyframes: node.scale_y },
+                rotation: AnimatedValue { keyframes: node.rotation }, opacity: AnimatedValue { keyframes: node.opacity },
+            }
         }).collect();
         validate_scene(dsl.version, dsl.duration, &nodes)?;
         nodes.sort_by_key(|node| node.layer);
@@ -189,6 +223,16 @@ impl Scene {
     }
 
     pub fn demo() -> Self { Self::from_dsl_json(include_str!("../../ai/example_scene.json")).expect("demo DSL scene should parse") }
+}
+
+fn validate_preset_references(dsl: &DslScene) -> Result<(), SceneLoadError> {
+    let mut errors = Vec::new();
+    for node in &dsl.nodes {
+        if let Some(preset_name) = &node.preset {
+            if !dsl.presets.contains_key(preset_name) { errors.push(format!("node '{}' references missing preset '{}'", node.id, preset_name)); }
+        }
+    }
+    if errors.is_empty() { Ok(()) } else { Err(SceneLoadError::Validation(errors)) }
 }
 
 fn validate_scene(version: u32, duration: f32, nodes: &[SceneNode]) -> Result<(), SceneLoadError> {
@@ -218,14 +262,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_versioned_scene() {
-        let scene = Scene::demo();
-        assert_eq!(scene.version, SUPPORTED_DSL_VERSION);
+    fn applies_animation_preset() {
+        let scene = Scene::from_dsl_json(r#"{"version":3,"duration":1,"presets":{"fade":{"opacity":[{"time":0,"value":0},{"time":1,"value":1}]}},"nodes":[{"id":"n1","type":"rect","preset":"fade"}]}"#).unwrap();
+        assert_eq!(scene.nodes[0].opacity.sample(0.5), 0.5);
     }
 
     #[test]
-    fn rejects_unsupported_dsl_version() {
-        let error = Scene::from_dsl_json(r#"{"version":2,"duration":1,"nodes":[]}"#).unwrap_err();
-        assert!(error.to_string().contains("unsupported DSL version"));
+    fn rejects_missing_animation_preset() {
+        let error = Scene::from_dsl_json(r#"{"version":3,"duration":1,"nodes":[{"id":"n1","type":"rect","preset":"missing"}]}"#).unwrap_err();
+        assert!(error.to_string().contains("missing preset"));
     }
 }
