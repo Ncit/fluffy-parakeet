@@ -2,10 +2,45 @@ use serde::Deserialize;
 
 use crate::uniforms::NodeUniform;
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Easing {
+    Linear,
+    EaseIn,
+    EaseOut,
+    EaseInOut,
+}
+
+impl Default for Easing {
+    fn default() -> Self {
+        Self::Linear
+    }
+}
+
+impl Easing {
+    pub fn apply(self, t: f32) -> f32 {
+        let t = t.clamp(0.0, 1.0);
+        match self {
+            Self::Linear => t,
+            Self::EaseIn => t * t,
+            Self::EaseOut => 1.0 - (1.0 - t) * (1.0 - t),
+            Self::EaseInOut => {
+                if t < 0.5 {
+                    2.0 * t * t
+                } else {
+                    1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub struct Keyframe {
     pub time: f32,
     pub value: f32,
+    #[serde(default)]
+    pub easing: Easing,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -16,7 +51,11 @@ pub struct AnimatedValue {
 impl AnimatedValue {
     pub fn constant(value: f32) -> Self {
         Self {
-            keyframes: vec![Keyframe { time: 0.0, value }],
+            keyframes: vec![Keyframe {
+                time: 0.0,
+                value,
+                easing: Easing::Linear,
+            }],
         }
     }
 
@@ -38,7 +77,8 @@ impl AnimatedValue {
                     return b.value;
                 }
                 let local_t = (t - a.time) / duration;
-                return a.value + (b.value - a.value) * local_t;
+                let eased_t = b.easing.apply(local_t);
+                return a.value + (b.value - a.value) * eased_t;
             }
         }
 
@@ -146,11 +186,19 @@ fn default_height() -> f32 {
 }
 
 fn default_rotation() -> Vec<Keyframe> {
-    vec![Keyframe { time: 0.0, value: 0.0 }]
+    vec![Keyframe {
+        time: 0.0,
+        value: 0.0,
+        easing: Easing::Linear,
+    }]
 }
 
 fn default_opacity() -> Vec<Keyframe> {
-    vec![Keyframe { time: 0.0, value: 1.0 }]
+    vec![Keyframe {
+        time: 0.0,
+        value: 1.0,
+        easing: Easing::Linear,
+    }]
 }
 
 impl Scene {
@@ -196,12 +244,24 @@ mod tests {
     fn samples_between_keyframes() {
         let value = AnimatedValue {
             keyframes: vec![
-                Keyframe { time: 0.0, value: 0.0 },
-                Keyframe { time: 1.0, value: 10.0 },
+                Keyframe { time: 0.0, value: 0.0, easing: Easing::Linear },
+                Keyframe { time: 1.0, value: 10.0, easing: Easing::Linear },
             ],
         };
 
         assert_eq!(value.sample(0.5), 5.0);
+    }
+
+    #[test]
+    fn supports_ease_in_keyframes() {
+        let value = AnimatedValue {
+            keyframes: vec![
+                Keyframe { time: 0.0, value: 0.0, easing: Easing::Linear },
+                Keyframe { time: 1.0, value: 10.0, easing: Easing::EaseIn },
+            ],
+        };
+
+        assert_eq!(value.sample(0.5), 2.5);
     }
 
     #[test]
