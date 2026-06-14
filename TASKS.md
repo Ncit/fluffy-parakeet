@@ -36,8 +36,8 @@ Status legend: `[x]` done, `[ ]` todo, `[~]` in progress / needs verification.
 - [x] Add `start_time` and `end_time` node lifecycle fields
 - [x] Skip inactive nodes during render
 - [x] Add timeline visibility tests
-- [ ] Add easing support to keyframes
-- [ ] Add easing tests
+- [x] Add easing support to keyframes
+- [x] Add easing tests
 - [ ] Add transform origin / anchor point support
 - [ ] Add parent-child node transforms
 - [ ] Add scene validation errors instead of panics
@@ -127,7 +127,7 @@ Status legend: `[x]` done, `[ ]` todo, `[~]` in progress / needs verification.
 ## Recommended next sprint
 
 1. Verify build and CI.
-2. Add easing.
+2. Add transform origin / anchor point support.
 3. Add README and DSL docs.
 4. Start text node rendering.
 5. Add renderer/editor bridge.
