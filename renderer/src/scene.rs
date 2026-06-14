@@ -101,6 +101,8 @@ pub struct SceneNode {
     pub color: [f32; 4],
     pub width: f32,
     pub height: f32,
+    pub anchor_x: f32,
+    pub anchor_y: f32,
     pub x: AnimatedValue,
     pub y: AnimatedValue,
     pub scale_x: AnimatedValue,
@@ -116,14 +118,16 @@ impl SceneNode {
 
     pub fn sample(&self, t: f32) -> SampledNode {
         let local_t = (t - self.start_time).max(0.0);
+        let scale_x = self.width * self.scale_x.sample(local_t);
+        let scale_y = self.height * self.scale_y.sample(local_t);
 
         SampledNode {
             uniform: NodeUniform {
-                offset: [self.x.sample(local_t), self.y.sample(local_t)],
-                scale: [
-                    self.width * self.scale_x.sample(local_t),
-                    self.height * self.scale_y.sample(local_t),
+                offset: [
+                    self.x.sample(local_t) + (0.5 - self.anchor_x) * scale_x,
+                    self.y.sample(local_t) + (0.5 - self.anchor_y) * scale_y,
                 ],
+                scale: [scale_x, scale_y],
                 rotation: self.rotation.sample(local_t),
                 opacity: self.opacity.sample(local_t),
                 _padding: [0.0, 0.0],
@@ -163,6 +167,10 @@ struct DslNode {
     width: f32,
     #[serde(default = "default_height")]
     height: f32,
+    #[serde(default = "default_anchor")]
+    anchor_x: f32,
+    #[serde(default = "default_anchor")]
+    anchor_y: f32,
     x: Vec<Keyframe>,
     y: Vec<Keyframe>,
     scale_x: Vec<Keyframe>,
@@ -183,6 +191,10 @@ fn default_width() -> f32 {
 
 fn default_height() -> f32 {
     1.0
+}
+
+fn default_anchor() -> f32 {
+    0.5
 }
 
 fn default_rotation() -> Vec<Keyframe> {
@@ -214,6 +226,8 @@ impl Scene {
             color: node.color,
             width: node.width,
             height: node.height,
+            anchor_x: node.anchor_x,
+            anchor_y: node.anchor_y,
             x: AnimatedValue { keyframes: node.x },
             y: AnimatedValue { keyframes: node.y },
             scale_x: AnimatedValue { keyframes: node.scale_x },
@@ -291,6 +305,36 @@ mod tests {
         let sampled = scene.nodes[0].sample(0.0);
         assert!(sampled.uniform.scale[0] > 0.0);
         assert!(sampled.uniform.scale[1] > 0.0);
+    }
+
+    #[test]
+    fn defaults_anchor_to_center() {
+        let scene = Scene::demo();
+        assert_eq!(scene.nodes[0].anchor_x, 0.5);
+        assert_eq!(scene.nodes[0].anchor_y, 0.5);
+    }
+
+    #[test]
+    fn supports_top_left_anchor_offset() {
+        let scene = Scene::from_dsl_json(r#"
+        {
+            "duration": 1.0,
+            "nodes": [{
+                "type": "rect",
+                "width": 1.0,
+                "height": 1.0,
+                "anchor_x": 0.0,
+                "anchor_y": 0.0,
+                "x": [{"time": 0.0, "value": 0.0}],
+                "y": [{"time": 0.0, "value": 0.0}],
+                "scale_x": [{"time": 0.0, "value": 1.0}],
+                "scale_y": [{"time": 0.0, "value": 1.0}]
+            }]
+        }
+        "#).unwrap();
+
+        let sampled = scene.nodes[0].sample(0.0);
+        assert_eq!(sampled.uniform.offset, [0.5, 0.5]);
     }
 
     #[test]
