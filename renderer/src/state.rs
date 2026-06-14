@@ -132,6 +132,10 @@ impl<'window> State<'window> {
         let timeline_time = self.time % self.scene.duration.max(0.001);
 
         for (node, render_object) in self.scene.nodes.iter().zip(self.render_objects.iter()) {
+            if !node.is_active(timeline_time) {
+                continue;
+            }
+
             let uniform: NodeUniform = node.sample(timeline_time).uniform;
             self.queue.write_buffer(&render_object.uniform_buffer, 0, bytemuck::bytes_of(&uniform));
         }
@@ -171,7 +175,11 @@ impl<'window> State<'window> {
             render_pass.set_pipeline(&self.pipeline.render_pipeline);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
 
-            for render_object in &self.render_objects {
+            for (node, render_object) in self.scene.nodes.iter().zip(self.render_objects.iter()) {
+                if !node.is_active(timeline_time) {
+                    continue;
+                }
+
                 render_pass.set_bind_group(0, &render_object.bind_group, &[]);
                 render_pass.draw(0..6, 0..1);
             }
