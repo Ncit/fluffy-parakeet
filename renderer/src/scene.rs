@@ -57,6 +57,8 @@ pub struct SceneNode {
     pub kind: String,
     pub layer: i32,
     pub color: [f32; 4],
+    pub width: f32,
+    pub height: f32,
     pub x: AnimatedValue,
     pub y: AnimatedValue,
     pub scale_x: AnimatedValue,
@@ -70,7 +72,7 @@ impl SceneNode {
         SampledNode {
             uniform: NodeUniform {
                 offset: [self.x.sample(t), self.y.sample(t)],
-                scale: [self.scale_x.sample(t), self.scale_y.sample(t)],
+                scale: [self.width * self.scale_x.sample(t), self.height * self.scale_y.sample(t)],
                 rotation: self.rotation.sample(t),
                 opacity: self.opacity.sample(t),
                 _padding: [0.0, 0.0],
@@ -102,6 +104,10 @@ struct DslNode {
     layer: i32,
     #[serde(default = "default_color")]
     color: [f32; 4],
+    #[serde(default = "default_width")]
+    width: f32,
+    #[serde(default = "default_height")]
+    height: f32,
     x: Vec<Keyframe>,
     y: Vec<Keyframe>,
     scale_x: Vec<Keyframe>,
@@ -114,6 +120,14 @@ struct DslNode {
 
 fn default_color() -> [f32; 4] {
     [0.2, 0.8, 1.0, 1.0]
+}
+
+fn default_width() -> f32 {
+    1.0
+}
+
+fn default_height() -> f32 {
+    1.0
 }
 
 fn default_rotation() -> Vec<Keyframe> {
@@ -133,6 +147,8 @@ impl Scene {
             kind: node.kind,
             layer: node.layer,
             color: node.color,
+            width: node.width,
+            height: node.height,
             x: AnimatedValue { keyframes: node.x },
             y: AnimatedValue { keyframes: node.y },
             scale_x: AnimatedValue { keyframes: node.scale_x },
@@ -190,5 +206,13 @@ mod tests {
         let sampled = scene.nodes[0].sample(0.0);
         assert!(sampled.uniform.opacity >= 0.0);
         assert!(sampled.uniform.color[3] > 0.0);
+    }
+
+    #[test]
+    fn applies_width_and_height_to_scale() {
+        let scene = Scene::demo();
+        let sampled = scene.nodes[0].sample(0.0);
+        assert!(sampled.uniform.scale[0] > 0.0);
+        assert!(sampled.uniform.scale[1] > 0.0);
     }
 }
