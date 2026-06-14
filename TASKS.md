@@ -46,8 +46,8 @@ Status legend: `[x]` done, `[ ]` todo, `[~]` in progress / needs verification.
 ## 3. DSL v3
 
 - [x] Version the DSL with a top-level `version` field
-- [ ] Add strict JSON schema for current DSL
-- [ ] Add schema validation to scripts/CI
+- [x] Add strict JSON schema for current DSL
+- [x] Add schema validation to scripts/CI
 - [ ] Add reusable animation presets
 - [ ] Add named styles
 - [ ] Add asset references
@@ -127,7 +127,7 @@ Status legend: `[x]` done, `[ ]` todo, `[~]` in progress / needs verification.
 ## Recommended next sprint
 
 1. Verify build and CI.
-2. Add strict JSON schema for current DSL.
-3. Add README and DSL docs.
-4. Start text node rendering.
-5. Add renderer/editor bridge.
+2. Add reusable animation presets.
+3. Add named styles.
+4. Add project metadata.
+5. Add README and DSL docs.
