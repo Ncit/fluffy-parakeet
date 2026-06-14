@@ -49,9 +49,9 @@ Status legend: `[x]` done, `[ ]` todo, `[~]` in progress / needs verification.
 - [x] Add strict JSON schema for current DSL
 - [x] Add schema validation to scripts/CI
 - [x] Add reusable animation presets
-- [ ] Add named styles
-- [ ] Add asset references
-- [ ] Add project-level metadata: fps, width, height, background
+- [x] Add named styles
+- [x] Add asset references
+- [x] Add project-level metadata: fps, width, height, background
 - [ ] Add deterministic scene loading from external files, not only `include_str!`
 
 ## 4. Text nodes
@@ -127,7 +127,7 @@ Status legend: `[x]` done, `[ ]` todo, `[~]` in progress / needs verification.
 ## Recommended next sprint
 
 1. Verify build and CI.
-2. Add named styles.
-3. Add project metadata.
-4. Add README and DSL docs.
-5. Start text node rendering.
+2. Add deterministic scene loading from external files.
+3. Add README and DSL docs.
+4. Start text node rendering.
+5. Add renderer/editor bridge.
