@@ -8,6 +8,7 @@ mod image;
 mod mesh;
 mod pipeline;
 mod project;
+mod project_writer;
 mod scene;
 mod scene_loader;
 mod state;
@@ -15,6 +16,7 @@ mod uniforms;
 
 pub use image::ImageFit;
 pub use project::{load_project, Project, ProjectManifest};
+pub use project_writer::create_project_skeleton;
 pub use scene_loader::load_scene_from_path;
 
 pub struct Renderer<'window> {
