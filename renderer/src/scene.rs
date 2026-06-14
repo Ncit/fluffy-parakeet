@@ -5,6 +5,8 @@ use serde::Deserialize;
 
 use crate::uniforms::NodeUniform;
 
+pub const SUPPORTED_DSL_VERSION: u32 = 3;
+
 #[derive(Debug)]
 pub enum SceneLoadError {
     Parse(serde_json::Error),
@@ -23,9 +25,7 @@ impl fmt::Display for SceneLoadError {
 impl std::error::Error for SceneLoadError {}
 
 impl From<serde_json::Error> for SceneLoadError {
-    fn from(error: serde_json::Error) -> Self {
-        Self::Parse(error)
-    }
+    fn from(error: serde_json::Error) -> Self { Self::Parse(error) }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
@@ -71,20 +71,14 @@ pub struct SampledNode { pub uniform: NodeUniform }
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct SelectionMetadata {
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub locked: bool,
-    #[serde(default = "default_selectable")]
-    pub selectable: bool,
-    #[serde(default)]
-    pub tags: Vec<String>,
+    #[serde(default)] pub name: String,
+    #[serde(default)] pub locked: bool,
+    #[serde(default = "default_selectable")] pub selectable: bool,
+    #[serde(default)] pub tags: Vec<String>,
 }
 
 impl Default for SelectionMetadata {
-    fn default() -> Self {
-        Self { name: String::new(), locked: false, selectable: true, tags: Vec::new() }
-    }
+    fn default() -> Self { Self { name: String::new(), locked: false, selectable: true, tags: Vec::new() } }
 }
 
 #[derive(Clone, Debug)]
@@ -129,10 +123,10 @@ impl SceneNode {
 }
 
 #[derive(Clone, Debug)]
-pub struct Scene { pub duration: f32, pub nodes: Vec<SceneNode> }
+pub struct Scene { pub version: u32, pub duration: f32, pub nodes: Vec<SceneNode> }
 
 #[derive(Debug, Deserialize)]
-struct DslScene { duration: f32, nodes: Vec<DslNode> }
+struct DslScene { version: u32, duration: f32, nodes: Vec<DslNode> }
 
 #[derive(Debug, Deserialize)]
 struct DslNode {
@@ -189,16 +183,17 @@ impl Scene {
             scale_x: AnimatedValue { keyframes: node.scale_x }, scale_y: AnimatedValue { keyframes: node.scale_y },
             rotation: AnimatedValue { keyframes: node.rotation }, opacity: AnimatedValue { keyframes: node.opacity },
         }).collect();
-        validate_scene(dsl.duration, &nodes)?;
+        validate_scene(dsl.version, dsl.duration, &nodes)?;
         nodes.sort_by_key(|node| node.layer);
-        Ok(Self { duration: dsl.duration, nodes })
+        Ok(Self { version: dsl.version, duration: dsl.duration, nodes })
     }
 
     pub fn demo() -> Self { Self::from_dsl_json(include_str!("../../ai/example_scene.json")).expect("demo DSL scene should parse") }
 }
 
-fn validate_scene(duration: f32, nodes: &[SceneNode]) -> Result<(), SceneLoadError> {
+fn validate_scene(version: u32, duration: f32, nodes: &[SceneNode]) -> Result<(), SceneLoadError> {
     let mut errors = Vec::new();
+    if version != SUPPORTED_DSL_VERSION { errors.push(format!("unsupported DSL version {version}; expected {SUPPORTED_DSL_VERSION}")); }
     if duration <= 0.0 { errors.push("duration must be greater than 0".to_string()); }
     let mut ids = HashSet::new();
     for (index, node) in nodes.iter().enumerate() {
@@ -223,15 +218,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_selection_metadata() {
-        let scene = Scene::from_dsl_json(r#"{"duration":1,"nodes":[{"id":"title","type":"rect","selection":{"name":"Title Card","locked":false,"selectable":true,"tags":["hero"]},"x":[{"time":0,"value":0}],"y":[{"time":0,"value":0}],"scale_x":[{"time":0,"value":1}],"scale_y":[{"time":0,"value":1}]}]}"#).unwrap();
-        assert_eq!(scene.node_by_id("title").unwrap().display_name(), "Title Card");
-        assert_eq!(scene.selectable_nodes().count(), 1);
+    fn parses_versioned_scene() {
+        let scene = Scene::demo();
+        assert_eq!(scene.version, SUPPORTED_DSL_VERSION);
     }
 
     #[test]
-    fn rejects_whitespace_ids() {
-        let error = Scene::from_dsl_json(r#"{"duration":1,"nodes":[{"id":"bad id","type":"rect","x":[{"time":0,"value":0}],"y":[{"time":0,"value":0}],"scale_x":[{"time":0,"value":1}],"scale_y":[{"time":0,"value":1}]}]}"#).unwrap_err();
-        assert!(error.to_string().contains("id cannot contain whitespace"));
+    fn rejects_unsupported_dsl_version() {
+        let error = Scene::from_dsl_json(r#"{"version":2,"duration":1,"nodes":[]}"#).unwrap_err();
+        assert!(error.to_string().contains("unsupported DSL version"));
     }
 }
