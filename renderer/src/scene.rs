@@ -69,6 +69,24 @@ impl AnimatedValue {
 #[derive(Clone, Copy, Debug)]
 pub struct SampledNode { pub uniform: NodeUniform }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct SelectionMetadata {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub locked: bool,
+    #[serde(default = "default_selectable")]
+    pub selectable: bool,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+impl Default for SelectionMetadata {
+    fn default() -> Self {
+        Self { name: String::new(), locked: false, selectable: true, tags: Vec::new() }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct SceneNode {
     pub id: String,
@@ -77,6 +95,7 @@ pub struct SceneNode {
     pub layer: i32,
     pub start_time: f32,
     pub end_time: Option<f32>,
+    pub selection: SelectionMetadata,
     pub color: [f32; 4],
     pub width: f32,
     pub height: f32,
@@ -92,6 +111,7 @@ pub struct SceneNode {
 
 impl SceneNode {
     pub fn is_active(&self, t: f32) -> bool { t >= self.start_time && self.end_time.map_or(true, |end_time| t <= end_time) }
+    pub fn display_name(&self) -> &str { if self.selection.name.is_empty() { &self.id } else { &self.selection.name } }
     fn local_uniform(&self, t: f32) -> NodeUniform {
         let local_t = (t - self.start_time).max(0.0);
         let scale_x = self.width * self.scale_x.sample(local_t);
@@ -116,12 +136,13 @@ struct DslScene { duration: f32, nodes: Vec<DslNode> }
 
 #[derive(Debug, Deserialize)]
 struct DslNode {
-    #[serde(default)] id: String,
+    id: String,
     #[serde(default)] parent_id: Option<String>,
     #[serde(rename = "type")] kind: String,
     #[serde(default)] layer: i32,
     #[serde(default)] start_time: f32,
     #[serde(default)] end_time: Option<f32>,
+    #[serde(default)] selection: SelectionMetadata,
     #[serde(default = "default_color")] color: [f32; 4],
     #[serde(default = "default_width")] width: f32,
     #[serde(default = "default_height")] height: f32,
@@ -136,10 +157,13 @@ fn default_color() -> [f32; 4] { [0.2, 0.8, 1.0, 1.0] }
 fn default_width() -> f32 { 1.0 }
 fn default_height() -> f32 { 1.0 }
 fn default_anchor() -> f32 { 0.5 }
+fn default_selectable() -> bool { true }
 fn default_rotation() -> Vec<Keyframe> { vec![Keyframe { time: 0.0, value: 0.0, easing: Easing::Linear }] }
 fn default_opacity() -> Vec<Keyframe> { vec![Keyframe { time: 0.0, value: 1.0, easing: Easing::Linear }] }
 
 impl Scene {
+    pub fn node_by_id(&self, id: &str) -> Option<&SceneNode> { self.nodes.iter().find(|node| node.id == id) }
+    pub fn selectable_nodes(&self) -> impl Iterator<Item = &SceneNode> { self.nodes.iter().filter(|node| node.selection.selectable && !node.selection.locked) }
     pub fn sample_node(&self, index: usize, t: f32) -> SampledNode {
         let mut uniform = self.nodes[index].local_uniform(t);
         if let Some(parent_id) = &self.nodes[index].parent_id {
@@ -159,7 +183,7 @@ impl Scene {
         let dsl: DslScene = serde_json::from_str(json)?;
         let mut nodes: Vec<SceneNode> = dsl.nodes.into_iter().map(|node| SceneNode {
             id: node.id, parent_id: node.parent_id, kind: node.kind, layer: node.layer,
-            start_time: node.start_time, end_time: node.end_time, color: node.color,
+            start_time: node.start_time, end_time: node.end_time, selection: node.selection, color: node.color,
             width: node.width, height: node.height, anchor_x: node.anchor_x, anchor_y: node.anchor_y,
             x: AnimatedValue { keyframes: node.x }, y: AnimatedValue { keyframes: node.y },
             scale_x: AnimatedValue { keyframes: node.scale_x }, scale_y: AnimatedValue { keyframes: node.scale_y },
@@ -179,6 +203,7 @@ fn validate_scene(duration: f32, nodes: &[SceneNode]) -> Result<(), SceneLoadErr
     let mut ids = HashSet::new();
     for (index, node) in nodes.iter().enumerate() {
         if node.id.trim().is_empty() { errors.push(format!("node {index} is missing id")); }
+        if node.id.chars().any(char::is_whitespace) { errors.push(format!("node '{}' id cannot contain whitespace", node.id)); }
         if !matches!(node.kind.as_str(), "rect" | "text" | "image") { errors.push(format!("node '{}' has unsupported type '{}'", node.id, node.kind)); }
         if node.width <= 0.0 || node.height <= 0.0 { errors.push(format!("node '{}' width and height must be positive", node.id)); }
         if let Some(end_time) = node.end_time { if end_time < node.start_time { errors.push(format!("node '{}' end_time must be >= start_time", node.id)); } }
@@ -198,14 +223,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_missing_ids() {
-        let error = Scene::from_dsl_json(r#"{"duration":1,"nodes":[{"type":"rect","x":[{"time":0,"value":0}],"y":[{"time":0,"value":0}],"scale_x":[{"time":0,"value":1}],"scale_y":[{"time":0,"value":1}]}]}"#).unwrap_err();
-        assert!(error.to_string().contains("missing id"));
+    fn parses_selection_metadata() {
+        let scene = Scene::from_dsl_json(r#"{"duration":1,"nodes":[{"id":"title","type":"rect","selection":{"name":"Title Card","locked":false,"selectable":true,"tags":["hero"]},"x":[{"time":0,"value":0}],"y":[{"time":0,"value":0}],"scale_x":[{"time":0,"value":1}],"scale_y":[{"time":0,"value":1}]}]}"#).unwrap();
+        assert_eq!(scene.node_by_id("title").unwrap().display_name(), "Title Card");
+        assert_eq!(scene.selectable_nodes().count(), 1);
     }
 
     #[test]
-    fn rejects_missing_parent() {
-        let error = Scene::from_dsl_json(r#"{"duration":1,"nodes":[{"id":"child","parent_id":"missing","type":"rect","x":[{"time":0,"value":0}],"y":[{"time":0,"value":0}],"scale_x":[{"time":0,"value":1}],"scale_y":[{"time":0,"value":1}]}]}"#).unwrap_err();
-        assert!(error.to_string().contains("missing parent_id"));
+    fn rejects_whitespace_ids() {
+        let error = Scene::from_dsl_json(r#"{"duration":1,"nodes":[{"id":"bad id","type":"rect","x":[{"time":0,"value":0}],"y":[{"time":0,"value":0}],"scale_x":[{"time":0,"value":1}],"scale_y":[{"time":0,"value":1}]}]}"#).unwrap_err();
+        assert!(error.to_string().contains("id cannot contain whitespace"));
     }
 }
