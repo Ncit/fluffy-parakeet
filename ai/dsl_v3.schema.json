@@ -8,6 +8,10 @@
   "properties": {
     "version": { "const": 3 },
     "duration": { "type": "number", "exclusiveMinimum": 0 },
+    "presets": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/animationPreset" }
+    },
     "nodes": {
       "type": "array",
       "items": { "$ref": "#/$defs/node" }
@@ -21,16 +25,21 @@
       "properties": {
         "time": { "type": "number", "minimum": 0 },
         "value": { "type": "number" },
-        "easing": {
-          "type": "string",
-          "enum": ["linear", "ease_in", "ease_out", "ease_in_out"]
-        }
+        "easing": { "type": "string", "enum": ["linear", "ease_in", "ease_out", "ease_in_out"] }
       }
     },
-    "animatedValue": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "$ref": "#/$defs/keyframe" }
+    "animatedValue": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/keyframe" } },
+    "animationPreset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": { "$ref": "#/$defs/animatedValue" },
+        "y": { "$ref": "#/$defs/animatedValue" },
+        "scale_x": { "$ref": "#/$defs/animatedValue" },
+        "scale_y": { "$ref": "#/$defs/animatedValue" },
+        "rotation": { "$ref": "#/$defs/animatedValue" },
+        "opacity": { "$ref": "#/$defs/animatedValue" }
+      }
     },
     "selection": {
       "type": "object",
@@ -39,34 +48,19 @@
         "name": { "type": "string" },
         "locked": { "type": "boolean" },
         "selectable": { "type": "boolean" },
-        "tags": {
-          "type": "array",
-          "items": { "type": "string" }
-        }
+        "tags": { "type": "array", "items": { "type": "string" } }
       }
     },
-    "color": {
-      "type": "array",
-      "minItems": 4,
-      "maxItems": 4,
-      "items": { "type": "number", "minimum": 0, "maximum": 1 }
-    },
+    "color": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number", "minimum": 0, "maximum": 1 } },
     "node": {
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "type", "x", "y", "scale_x", "scale_y"],
       "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^[^\\s]+$"
-        },
-        "parent_id": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^[^\\s]+$"
-        },
+        "id": { "type": "string", "minLength": 1, "pattern": "^[^\\s]+$" },
+        "parent_id": { "type": "string", "minLength": 1, "pattern": "^[^\\s]+$" },
         "type": { "type": "string", "enum": ["rect", "text", "image"] },
+        "preset": { "type": "string", "minLength": 1 },
         "layer": { "type": "integer" },
         "start_time": { "type": "number", "minimum": 0 },
         "end_time": { "type": "number", "minimum": 0 },
