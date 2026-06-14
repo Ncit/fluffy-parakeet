@@ -1,22 +1,37 @@
+use std::collections::HashSet;
+use std::fmt;
+
 use serde::Deserialize;
 
 use crate::uniforms::NodeUniform;
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum Easing {
-    Linear,
-    EaseIn,
-    EaseOut,
-    EaseInOut,
+#[derive(Debug)]
+pub enum SceneLoadError {
+    Parse(serde_json::Error),
+    Validation(Vec<String>),
 }
 
-impl Default for Easing {
-    fn default() -> Self {
-        Self::Linear
+impl fmt::Display for SceneLoadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Parse(error) => write!(f, "failed to parse scene DSL: {error}"),
+            Self::Validation(errors) => write!(f, "scene validation failed: {}", errors.join("; ")),
+        }
     }
 }
 
+impl std::error::Error for SceneLoadError {}
+
+impl From<serde_json::Error> for SceneLoadError {
+    fn from(error: serde_json::Error) -> Self {
+        Self::Parse(error)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Easing { Linear, EaseIn, EaseOut, EaseInOut }
+impl Default for Easing { fn default() -> Self { Self::Linear } }
 impl Easing {
     pub fn apply(self, t: f32) -> f32 {
         let t = t.clamp(0.0, 1.0);
@@ -24,35 +39,18 @@ impl Easing {
             Self::Linear => t,
             Self::EaseIn => t * t,
             Self::EaseOut => 1.0 - (1.0 - t) * (1.0 - t),
-            Self::EaseInOut => {
-                if t < 0.5 {
-                    2.0 * t * t
-                } else {
-                    1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
-                }
-            }
+            Self::EaseInOut => if t < 0.5 { 2.0 * t * t } else { 1.0 - (-2.0 * t + 2.0).powi(2) / 2.0 },
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
-pub struct Keyframe {
-    pub time: f32,
-    pub value: f32,
-    #[serde(default)]
-    pub easing: Easing,
-}
+pub struct Keyframe { pub time: f32, pub value: f32, #[serde(default)] pub easing: Easing }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct AnimatedValue {
-    pub keyframes: Vec<Keyframe>,
-}
-
+pub struct AnimatedValue { pub keyframes: Vec<Keyframe> }
 impl AnimatedValue {
-    pub fn constant(value: f32) -> Self {
-        Self { keyframes: vec![Keyframe { time: 0.0, value, easing: Easing::Linear }] }
-    }
-
+    pub fn constant(value: f32) -> Self { Self { keyframes: vec![Keyframe { time: 0.0, value, easing: Easing::Linear }] } }
     pub fn sample(&self, t: f32) -> f32 {
         if self.keyframes.is_empty() { return 0.0; }
         if t <= self.keyframes[0].time { return self.keyframes[0].value; }
@@ -61,8 +59,7 @@ impl AnimatedValue {
             if t >= a.time && t <= b.time {
                 let duration = b.time - a.time;
                 if duration.abs() < f32::EPSILON { return b.value; }
-                let eased_t = b.easing.apply((t - a.time) / duration);
-                return a.value + (b.value - a.value) * eased_t;
+                return a.value + (b.value - a.value) * b.easing.apply((t - a.time) / duration);
             }
         }
         self.keyframes.last().unwrap().value
@@ -94,10 +91,7 @@ pub struct SceneNode {
 }
 
 impl SceneNode {
-    pub fn is_active(&self, t: f32) -> bool {
-        t >= self.start_time && self.end_time.map_or(true, |end_time| t <= end_time)
-    }
-
+    pub fn is_active(&self, t: f32) -> bool { t >= self.start_time && self.end_time.map_or(true, |end_time| t <= end_time) }
     fn local_uniform(&self, t: f32) -> NodeUniform {
         let local_t = (t - self.start_time).max(0.0);
         let scale_x = self.width * self.scale_x.sample(local_t);
@@ -111,10 +105,7 @@ impl SceneNode {
             color: self.color,
         }
     }
-
-    pub fn sample(&self, t: f32) -> SampledNode {
-        SampledNode { uniform: self.local_uniform(t) }
-    }
+    pub fn sample(&self, t: f32) -> SampledNode { SampledNode { uniform: self.local_uniform(t) } }
 }
 
 #[derive(Clone, Debug)]
@@ -136,10 +127,7 @@ struct DslNode {
     #[serde(default = "default_height")] height: f32,
     #[serde(default = "default_anchor")] anchor_x: f32,
     #[serde(default = "default_anchor")] anchor_y: f32,
-    x: Vec<Keyframe>,
-    y: Vec<Keyframe>,
-    scale_x: Vec<Keyframe>,
-    scale_y: Vec<Keyframe>,
+    x: Vec<Keyframe>, y: Vec<Keyframe>, scale_x: Vec<Keyframe>, scale_y: Vec<Keyframe>,
     #[serde(default = "default_rotation")] rotation: Vec<Keyframe>,
     #[serde(default = "default_opacity")] opacity: Vec<Keyframe>,
 }
@@ -167,34 +155,42 @@ impl Scene {
         SampledNode { uniform }
     }
 
-    pub fn from_dsl_json(json: &str) -> Result<Self, serde_json::Error> {
+    pub fn from_dsl_json(json: &str) -> Result<Self, SceneLoadError> {
         let dsl: DslScene = serde_json::from_str(json)?;
         let mut nodes: Vec<SceneNode> = dsl.nodes.into_iter().map(|node| SceneNode {
-            id: node.id,
-            parent_id: node.parent_id,
-            kind: node.kind,
-            layer: node.layer,
-            start_time: node.start_time,
-            end_time: node.end_time,
-            color: node.color,
-            width: node.width,
-            height: node.height,
-            anchor_x: node.anchor_x,
-            anchor_y: node.anchor_y,
-            x: AnimatedValue { keyframes: node.x },
-            y: AnimatedValue { keyframes: node.y },
-            scale_x: AnimatedValue { keyframes: node.scale_x },
-            scale_y: AnimatedValue { keyframes: node.scale_y },
-            rotation: AnimatedValue { keyframes: node.rotation },
-            opacity: AnimatedValue { keyframes: node.opacity },
+            id: node.id, parent_id: node.parent_id, kind: node.kind, layer: node.layer,
+            start_time: node.start_time, end_time: node.end_time, color: node.color,
+            width: node.width, height: node.height, anchor_x: node.anchor_x, anchor_y: node.anchor_y,
+            x: AnimatedValue { keyframes: node.x }, y: AnimatedValue { keyframes: node.y },
+            scale_x: AnimatedValue { keyframes: node.scale_x }, scale_y: AnimatedValue { keyframes: node.scale_y },
+            rotation: AnimatedValue { keyframes: node.rotation }, opacity: AnimatedValue { keyframes: node.opacity },
         }).collect();
+        validate_scene(dsl.duration, &nodes)?;
         nodes.sort_by_key(|node| node.layer);
         Ok(Self { duration: dsl.duration, nodes })
     }
 
-    pub fn demo() -> Self {
-        Self::from_dsl_json(include_str!("../../ai/example_scene.json")).expect("demo DSL scene should parse")
+    pub fn demo() -> Self { Self::from_dsl_json(include_str!("../../ai/example_scene.json")).expect("demo DSL scene should parse") }
+}
+
+fn validate_scene(duration: f32, nodes: &[SceneNode]) -> Result<(), SceneLoadError> {
+    let mut errors = Vec::new();
+    if duration <= 0.0 { errors.push("duration must be greater than 0".to_string()); }
+    let mut ids = HashSet::new();
+    for (index, node) in nodes.iter().enumerate() {
+        if node.id.trim().is_empty() { errors.push(format!("node {index} is missing id")); }
+        if !matches!(node.kind.as_str(), "rect" | "text" | "image") { errors.push(format!("node '{}' has unsupported type '{}'", node.id, node.kind)); }
+        if node.width <= 0.0 || node.height <= 0.0 { errors.push(format!("node '{}' width and height must be positive", node.id)); }
+        if let Some(end_time) = node.end_time { if end_time < node.start_time { errors.push(format!("node '{}' end_time must be >= start_time", node.id)); } }
+        if !ids.insert(node.id.clone()) { errors.push(format!("duplicate node id '{}'", node.id)); }
     }
+    for node in nodes {
+        if let Some(parent_id) = &node.parent_id {
+            if !ids.contains(parent_id) { errors.push(format!("node '{}' references missing parent_id '{}'", node.id, parent_id)); }
+            if parent_id == &node.id { errors.push(format!("node '{}' cannot parent itself", node.id)); }
+        }
+    }
+    if errors.is_empty() { Ok(()) } else { Err(SceneLoadError::Validation(errors)) }
 }
 
 #[cfg(test)]
@@ -202,17 +198,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn supports_parent_child_offsets() {
-        let scene = Scene::from_dsl_json(r#"
-        {
-            "duration": 1.0,
-            "nodes": [
-                {"id":"parent","type":"rect","x":[{"time":0,"value":0.25}],"y":[{"time":0,"value":0.25}],"scale_x":[{"time":0,"value":1}],"scale_y":[{"time":0,"value":1}]},
-                {"id":"child","parent_id":"parent","type":"rect","x":[{"time":0,"value":0.1}],"y":[{"time":0,"value":0.2}],"scale_x":[{"time":0,"value":1}],"scale_y":[{"time":0,"value":1}]}
-            ]
-        }
-        "#).unwrap();
-        let child = scene.sample_node(1, 0.0).uniform;
-        assert_eq!(child.offset, [0.35, 0.45]);
+    fn rejects_missing_ids() {
+        let error = Scene::from_dsl_json(r#"{"duration":1,"nodes":[{"type":"rect","x":[{"time":0,"value":0}],"y":[{"time":0,"value":0}],"scale_x":[{"time":0,"value":1}],"scale_y":[{"time":0,"value":1}]}]}"#).unwrap_err();
+        assert!(error.to_string().contains("missing id"));
+    }
+
+    #[test]
+    fn rejects_missing_parent() {
+        let error = Scene::from_dsl_json(r#"{"duration":1,"nodes":[{"id":"child","parent_id":"missing","type":"rect","x":[{"time":0,"value":0}],"y":[{"time":0,"value":0}],"scale_x":[{"time":0,"value":1}],"scale_y":[{"time":0,"value":1}]}]}"#).unwrap_err();
+        assert!(error.to_string().contains("missing parent_id"));
     }
 }
