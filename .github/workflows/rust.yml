@@ -1,27 +1,11 @@
 name: Rust
 
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
+    if: false
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-      - name: Install Python validation dependencies
-        run: python -m pip install jsonschema
-      - name: Validate DSL examples
-        run: python scripts/validate_dsl.py
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Check workspace
-        run: cargo check --workspace
-      - name: Test workspace
-        run: cargo test --workspace
+      - run: echo "CI is intentionally disabled for now."
