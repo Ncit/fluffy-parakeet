@@ -7,8 +7,11 @@ use winit::{
 mod mesh;
 mod pipeline;
 mod scene;
+mod scene_loader;
 mod state;
 mod uniforms;
+
+pub use scene_loader::load_scene_from_path;
 
 pub struct Renderer<'window> {
     pub state: state::State<'window>,
