@@ -39,7 +39,7 @@ Status legend: `[x]` done, `[ ]` todo, `[~]` in progress / needs verification.
 - [x] Add easing support to keyframes
 - [x] Add easing tests
 - [x] Add transform origin / anchor point support
-- [ ] Add parent-child node transforms
+- [x] Add parent-child node transforms
 - [ ] Add scene validation errors instead of panics
 - [ ] Add stable node IDs and selection metadata
 
@@ -127,7 +127,7 @@ Status legend: `[x]` done, `[ ]` todo, `[~]` in progress / needs verification.
 ## Recommended next sprint
 
 1. Verify build and CI.
-2. Add parent-child node transforms.
+2. Add scene validation errors.
 3. Add README and DSL docs.
 4. Start text node rendering.
 5. Add renderer/editor bridge.
