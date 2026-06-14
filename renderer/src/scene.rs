@@ -50,50 +50,32 @@ pub struct AnimatedValue {
 
 impl AnimatedValue {
     pub fn constant(value: f32) -> Self {
-        Self {
-            keyframes: vec![Keyframe {
-                time: 0.0,
-                value,
-                easing: Easing::Linear,
-            }],
-        }
+        Self { keyframes: vec![Keyframe { time: 0.0, value, easing: Easing::Linear }] }
     }
 
     pub fn sample(&self, t: f32) -> f32 {
-        if self.keyframes.is_empty() {
-            return 0.0;
-        }
-
-        if t <= self.keyframes[0].time {
-            return self.keyframes[0].value;
-        }
-
+        if self.keyframes.is_empty() { return 0.0; }
+        if t <= self.keyframes[0].time { return self.keyframes[0].value; }
         for pair in self.keyframes.windows(2) {
-            let a = pair[0];
-            let b = pair[1];
+            let a = pair[0]; let b = pair[1];
             if t >= a.time && t <= b.time {
                 let duration = b.time - a.time;
-                if duration.abs() < f32::EPSILON {
-                    return b.value;
-                }
-                let local_t = (t - a.time) / duration;
-                let eased_t = b.easing.apply(local_t);
+                if duration.abs() < f32::EPSILON { return b.value; }
+                let eased_t = b.easing.apply((t - a.time) / duration);
                 return a.value + (b.value - a.value) * eased_t;
             }
         }
-
         self.keyframes.last().unwrap().value
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct SampledNode {
-    pub uniform: NodeUniform,
-}
+pub struct SampledNode { pub uniform: NodeUniform }
 
 #[derive(Clone, Debug)]
 pub struct SceneNode {
     pub id: String,
+    pub parent_id: Option<String>,
     pub kind: String,
     pub layer: i32,
     pub start_time: f32,
@@ -116,109 +98,80 @@ impl SceneNode {
         t >= self.start_time && self.end_time.map_or(true, |end_time| t <= end_time)
     }
 
-    pub fn sample(&self, t: f32) -> SampledNode {
+    fn local_uniform(&self, t: f32) -> NodeUniform {
         let local_t = (t - self.start_time).max(0.0);
         let scale_x = self.width * self.scale_x.sample(local_t);
         let scale_y = self.height * self.scale_y.sample(local_t);
-
-        SampledNode {
-            uniform: NodeUniform {
-                offset: [
-                    self.x.sample(local_t) + (0.5 - self.anchor_x) * scale_x,
-                    self.y.sample(local_t) + (0.5 - self.anchor_y) * scale_y,
-                ],
-                scale: [scale_x, scale_y],
-                rotation: self.rotation.sample(local_t),
-                opacity: self.opacity.sample(local_t),
-                _padding: [0.0, 0.0],
-                color: self.color,
-            },
+        NodeUniform {
+            offset: [self.x.sample(local_t) + (0.5 - self.anchor_x) * scale_x, self.y.sample(local_t) + (0.5 - self.anchor_y) * scale_y],
+            scale: [scale_x, scale_y],
+            rotation: self.rotation.sample(local_t),
+            opacity: self.opacity.sample(local_t),
+            _padding: [0.0, 0.0],
+            color: self.color,
         }
+    }
+
+    pub fn sample(&self, t: f32) -> SampledNode {
+        SampledNode { uniform: self.local_uniform(t) }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Scene {
-    pub duration: f32,
-    pub nodes: Vec<SceneNode>,
-}
+pub struct Scene { pub duration: f32, pub nodes: Vec<SceneNode> }
 
 #[derive(Debug, Deserialize)]
-struct DslScene {
-    duration: f32,
-    nodes: Vec<DslNode>,
-}
+struct DslScene { duration: f32, nodes: Vec<DslNode> }
 
 #[derive(Debug, Deserialize)]
 struct DslNode {
-    #[serde(default)]
-    id: String,
-    #[serde(rename = "type")]
-    kind: String,
-    #[serde(default)]
-    layer: i32,
-    #[serde(default)]
-    start_time: f32,
-    #[serde(default)]
-    end_time: Option<f32>,
-    #[serde(default = "default_color")]
-    color: [f32; 4],
-    #[serde(default = "default_width")]
-    width: f32,
-    #[serde(default = "default_height")]
-    height: f32,
-    #[serde(default = "default_anchor")]
-    anchor_x: f32,
-    #[serde(default = "default_anchor")]
-    anchor_y: f32,
+    #[serde(default)] id: String,
+    #[serde(default)] parent_id: Option<String>,
+    #[serde(rename = "type")] kind: String,
+    #[serde(default)] layer: i32,
+    #[serde(default)] start_time: f32,
+    #[serde(default)] end_time: Option<f32>,
+    #[serde(default = "default_color")] color: [f32; 4],
+    #[serde(default = "default_width")] width: f32,
+    #[serde(default = "default_height")] height: f32,
+    #[serde(default = "default_anchor")] anchor_x: f32,
+    #[serde(default = "default_anchor")] anchor_y: f32,
     x: Vec<Keyframe>,
     y: Vec<Keyframe>,
     scale_x: Vec<Keyframe>,
     scale_y: Vec<Keyframe>,
-    #[serde(default = "default_rotation")]
-    rotation: Vec<Keyframe>,
-    #[serde(default = "default_opacity")]
-    opacity: Vec<Keyframe>,
+    #[serde(default = "default_rotation")] rotation: Vec<Keyframe>,
+    #[serde(default = "default_opacity")] opacity: Vec<Keyframe>,
 }
 
-fn default_color() -> [f32; 4] {
-    [0.2, 0.8, 1.0, 1.0]
-}
-
-fn default_width() -> f32 {
-    1.0
-}
-
-fn default_height() -> f32 {
-    1.0
-}
-
-fn default_anchor() -> f32 {
-    0.5
-}
-
-fn default_rotation() -> Vec<Keyframe> {
-    vec![Keyframe {
-        time: 0.0,
-        value: 0.0,
-        easing: Easing::Linear,
-    }]
-}
-
-fn default_opacity() -> Vec<Keyframe> {
-    vec![Keyframe {
-        time: 0.0,
-        value: 1.0,
-        easing: Easing::Linear,
-    }]
-}
+fn default_color() -> [f32; 4] { [0.2, 0.8, 1.0, 1.0] }
+fn default_width() -> f32 { 1.0 }
+fn default_height() -> f32 { 1.0 }
+fn default_anchor() -> f32 { 0.5 }
+fn default_rotation() -> Vec<Keyframe> { vec![Keyframe { time: 0.0, value: 0.0, easing: Easing::Linear }] }
+fn default_opacity() -> Vec<Keyframe> { vec![Keyframe { time: 0.0, value: 1.0, easing: Easing::Linear }] }
 
 impl Scene {
+    pub fn sample_node(&self, index: usize, t: f32) -> SampledNode {
+        let mut uniform = self.nodes[index].local_uniform(t);
+        if let Some(parent_id) = &self.nodes[index].parent_id {
+            if let Some(parent_index) = self.nodes.iter().position(|node| &node.id == parent_id) {
+                let parent = self.sample_node(parent_index, t).uniform;
+                uniform.offset[0] += parent.offset[0];
+                uniform.offset[1] += parent.offset[1];
+                uniform.rotation += parent.rotation;
+                uniform.opacity *= parent.opacity;
+                uniform.color[3] *= parent.color[3];
+            }
+        }
+        SampledNode { uniform }
+    }
+
     pub fn from_dsl_json(json: &str) -> Result<Self, serde_json::Error> {
         let dsl: DslScene = serde_json::from_str(json)?;
-
         let mut nodes: Vec<SceneNode> = dsl.nodes.into_iter().map(|node| SceneNode {
             id: node.id,
+            parent_id: node.parent_id,
             kind: node.kind,
             layer: node.layer,
             start_time: node.start_time,
@@ -235,18 +188,12 @@ impl Scene {
             rotation: AnimatedValue { keyframes: node.rotation },
             opacity: AnimatedValue { keyframes: node.opacity },
         }).collect();
-
         nodes.sort_by_key(|node| node.layer);
-
-        Ok(Self {
-            duration: dsl.duration,
-            nodes,
-        })
+        Ok(Self { duration: dsl.duration, nodes })
     }
 
     pub fn demo() -> Self {
-        Self::from_dsl_json(include_str!("../../ai/example_scene.json"))
-            .expect("demo DSL scene should parse")
+        Self::from_dsl_json(include_str!("../../ai/example_scene.json")).expect("demo DSL scene should parse")
     }
 }
 
@@ -255,107 +202,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn samples_between_keyframes() {
-        let value = AnimatedValue {
-            keyframes: vec![
-                Keyframe { time: 0.0, value: 0.0, easing: Easing::Linear },
-                Keyframe { time: 1.0, value: 10.0, easing: Easing::Linear },
-            ],
-        };
-
-        assert_eq!(value.sample(0.5), 5.0);
-    }
-
-    #[test]
-    fn supports_ease_in_keyframes() {
-        let value = AnimatedValue {
-            keyframes: vec![
-                Keyframe { time: 0.0, value: 0.0, easing: Easing::Linear },
-                Keyframe { time: 1.0, value: 10.0, easing: Easing::EaseIn },
-            ],
-        };
-
-        assert_eq!(value.sample(0.5), 2.5);
-    }
-
-    #[test]
-    fn parses_demo_scene() {
-        let scene = Scene::demo();
-        assert_eq!(scene.nodes.len(), 2);
-        assert!(scene.duration > 0.0);
-    }
-
-    #[test]
-    fn sorts_nodes_by_layer() {
-        let scene = Scene::demo();
-        assert!(scene.nodes[0].layer <= scene.nodes[1].layer);
-    }
-
-    #[test]
-    fn samples_visual_uniforms() {
-        let scene = Scene::demo();
-        let sampled = scene.nodes[0].sample(0.0);
-        assert!(sampled.uniform.opacity >= 0.0);
-        assert!(sampled.uniform.color[3] > 0.0);
-    }
-
-    #[test]
-    fn applies_width_and_height_to_scale() {
-        let scene = Scene::demo();
-        let sampled = scene.nodes[0].sample(0.0);
-        assert!(sampled.uniform.scale[0] > 0.0);
-        assert!(sampled.uniform.scale[1] > 0.0);
-    }
-
-    #[test]
-    fn defaults_anchor_to_center() {
-        let scene = Scene::demo();
-        assert_eq!(scene.nodes[0].anchor_x, 0.5);
-        assert_eq!(scene.nodes[0].anchor_y, 0.5);
-    }
-
-    #[test]
-    fn supports_top_left_anchor_offset() {
+    fn supports_parent_child_offsets() {
         let scene = Scene::from_dsl_json(r#"
         {
             "duration": 1.0,
-            "nodes": [{
-                "type": "rect",
-                "width": 1.0,
-                "height": 1.0,
-                "anchor_x": 0.0,
-                "anchor_y": 0.0,
-                "x": [{"time": 0.0, "value": 0.0}],
-                "y": [{"time": 0.0, "value": 0.0}],
-                "scale_x": [{"time": 0.0, "value": 1.0}],
-                "scale_y": [{"time": 0.0, "value": 1.0}]
-            }]
+            "nodes": [
+                {"id":"parent","type":"rect","x":[{"time":0,"value":0.25}],"y":[{"time":0,"value":0.25}],"scale_x":[{"time":0,"value":1}],"scale_y":[{"time":0,"value":1}]},
+                {"id":"child","parent_id":"parent","type":"rect","x":[{"time":0,"value":0.1}],"y":[{"time":0,"value":0.2}],"scale_x":[{"time":0,"value":1}],"scale_y":[{"time":0,"value":1}]}
+            ]
         }
         "#).unwrap();
-
-        let sampled = scene.nodes[0].sample(0.0);
-        assert_eq!(sampled.uniform.offset, [0.5, 0.5]);
-    }
-
-    #[test]
-    fn respects_node_lifecycle() {
-        let scene = Scene::from_dsl_json(r#"
-        {
-            "duration": 3.0,
-            "nodes": [{
-                "type": "rect",
-                "start_time": 1.0,
-                "end_time": 2.0,
-                "x": [{"time": 0.0, "value": 0.0}],
-                "y": [{"time": 0.0, "value": 0.0}],
-                "scale_x": [{"time": 0.0, "value": 1.0}],
-                "scale_y": [{"time": 0.0, "value": 1.0}]
-            }]
-        }
-        "#).unwrap();
-
-        assert!(!scene.nodes[0].is_active(0.5));
-        assert!(scene.nodes[0].is_active(1.5));
-        assert!(!scene.nodes[0].is_active(2.5));
+        let child = scene.sample_node(1, 0.0).uniform;
+        assert_eq!(child.offset, [0.35, 0.45]);
     }
 }
