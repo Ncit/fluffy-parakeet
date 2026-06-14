@@ -12,6 +12,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install Python validation dependencies
+        run: python -m pip install jsonschema
+      - name: Validate DSL examples
+        run: python scripts/validate_dsl.py
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check workspace
