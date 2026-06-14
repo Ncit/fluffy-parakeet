@@ -48,7 +48,7 @@ Status legend: `[x]` done, `[ ]` todo, `[~]` in progress / needs verification.
 - [x] Version the DSL with a top-level `version` field
 - [x] Add strict JSON schema for current DSL
 - [x] Add schema validation to scripts/CI
-- [ ] Add reusable animation presets
+- [x] Add reusable animation presets
 - [ ] Add named styles
 - [ ] Add asset references
 - [ ] Add project-level metadata: fps, width, height, background
@@ -127,7 +127,7 @@ Status legend: `[x]` done, `[ ]` todo, `[~]` in progress / needs verification.
 ## Recommended next sprint
 
 1. Verify build and CI.
-2. Add reusable animation presets.
-3. Add named styles.
-4. Add project metadata.
-5. Add README and DSL docs.
+2. Add named styles.
+3. Add project metadata.
+4. Add README and DSL docs.
+5. Start text node rendering.
