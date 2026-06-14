@@ -7,12 +7,14 @@ use winit::{
 mod image;
 mod mesh;
 mod pipeline;
+mod project;
 mod scene;
 mod scene_loader;
 mod state;
 mod uniforms;
 
 pub use image::ImageFit;
+pub use project::{load_project, Project, ProjectManifest};
 pub use scene_loader::load_scene_from_path;
 
 pub struct Renderer<'window> {
