@@ -56,6 +56,8 @@ pub struct SceneNode {
     pub id: String,
     pub kind: String,
     pub layer: i32,
+    pub start_time: f32,
+    pub end_time: Option<f32>,
     pub color: [f32; 4],
     pub width: f32,
     pub height: f32,
@@ -68,13 +70,22 @@ pub struct SceneNode {
 }
 
 impl SceneNode {
+    pub fn is_active(&self, t: f32) -> bool {
+        t >= self.start_time && self.end_time.map_or(true, |end_time| t <= end_time)
+    }
+
     pub fn sample(&self, t: f32) -> SampledNode {
+        let local_t = (t - self.start_time).max(0.0);
+
         SampledNode {
             uniform: NodeUniform {
-                offset: [self.x.sample(t), self.y.sample(t)],
-                scale: [self.width * self.scale_x.sample(t), self.height * self.scale_y.sample(t)],
-                rotation: self.rotation.sample(t),
-                opacity: self.opacity.sample(t),
+                offset: [self.x.sample(local_t), self.y.sample(local_t)],
+                scale: [
+                    self.width * self.scale_x.sample(local_t),
+                    self.height * self.scale_y.sample(local_t),
+                ],
+                rotation: self.rotation.sample(local_t),
+                opacity: self.opacity.sample(local_t),
                 _padding: [0.0, 0.0],
                 color: self.color,
             },
@@ -102,6 +113,10 @@ struct DslNode {
     kind: String,
     #[serde(default)]
     layer: i32,
+    #[serde(default)]
+    start_time: f32,
+    #[serde(default)]
+    end_time: Option<f32>,
     #[serde(default = "default_color")]
     color: [f32; 4],
     #[serde(default = "default_width")]
@@ -146,6 +161,8 @@ impl Scene {
             id: node.id,
             kind: node.kind,
             layer: node.layer,
+            start_time: node.start_time,
+            end_time: node.end_time,
             color: node.color,
             width: node.width,
             height: node.height,
@@ -214,5 +231,27 @@ mod tests {
         let sampled = scene.nodes[0].sample(0.0);
         assert!(sampled.uniform.scale[0] > 0.0);
         assert!(sampled.uniform.scale[1] > 0.0);
+    }
+
+    #[test]
+    fn respects_node_lifecycle() {
+        let scene = Scene::from_dsl_json(r#"
+        {
+            "duration": 3.0,
+            "nodes": [{
+                "type": "rect",
+                "start_time": 1.0,
+                "end_time": 2.0,
+                "x": [{"time": 0.0, "value": 0.0}],
+                "y": [{"time": 0.0, "value": 0.0}],
+                "scale_x": [{"time": 0.0, "value": 1.0}],
+                "scale_y": [{"time": 0.0, "value": 1.0}]
+            }]
+        }
+        "#).unwrap();
+
+        assert!(!scene.nodes[0].is_active(0.5));
+        assert!(scene.nodes[0].is_active(1.5));
+        assert!(!scene.nodes[0].is_active(2.5));
     }
 }
